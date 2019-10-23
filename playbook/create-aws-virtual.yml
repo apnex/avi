@@ -1,0 +1,80 @@
+---
+- hosts: localhost
+  connection: local
+  gather_facts: False
+  vars_files:
+    - vars.yml
+  vars:
+    avi_credentials:
+      username: "admin"
+      password: "{{avi_password}}"
+      controller: "anz-controller.demoavi.com"
+      api_version: "17.2.14"
+
+
+  pre_tasks:
+    - name: Gather EC2 client instance remote facts.
+      ec2_instance_facts:
+        region: "{{ region | default('ap-southeast-2') }}"
+        profile: "{{ aws_profile | default('default') }}"
+        filters:
+          "tag:Name": "*DemoServer*"
+      register: ec2_client_instance_facts
+    - name: Debug.
+      debug:
+        msg: "{{ ec2_client_instance_facts }}"
+    - name: Make a group
+      add_host: hostname={{ item }} groups=clients
+      with_items: "{{ ec2_client_instance_facts.instances|selectattr('state.name', 'equalto', 'running')|map(attribute='private_ip_address')|list }}"
+
+    - name: gather vip subnet facts
+      ec2_vpc_subnet_facts:
+        region: "{{ region | default('ap-southeast-2') }}"
+        profile: "{{ aws_profile | default('default') }}"
+        filters:
+          vpc-id: "{{ vpc_id }}"
+          "tag:Name": "*demolabpub*a"
+      register: subnet_facts
+   
+    - name: set subnet vip facts
+      set_fact:
+        pub_subnet1_id: "{{ subnet_facts.subnets|map(attribute='id')|list }}"
+
+
+  roles:
+  - role: avinetworks.avisdk
+
+  post_tasks:
+    - name: Create Pool
+      avi_pool:
+        tenant: "Demo"
+        avi_credentials: "{{ avi_credentials }}"        
+        state: "{{ state | default('present') }}"
+        name: ansible_test_pool
+        lb_algorithm: LB_ALGORITHM_ROUND_ROBIN
+        servers:
+        - ip:
+            addr: "{{ ec2_client_instance_facts.instances.0.private_ip_address }}"
+            type: 'V4'
+        - ip:
+            addr: "{{ ec2_client_instance_facts.instances.1.private_ip_address }}"
+            type: 'V4'
+        - ip:
+            addr: "{{ ec2_client_instance_facts.instances.2.private_ip_address }}"
+            type: 'V4'
+    - name: Create Virtual Service
+      avi_virtualservice:
+        tenant: "Demo"
+        avi_credentials: "{{ avi_credentials }}"
+        state: "{{ state | default('present') }}"
+        name: ansible_test_vs
+        services:
+        - port: 80
+        pool_ref: '/api/pool?name=ansible_test_pool'
+        vip:
+          - subnet:
+            auto_allocate_ip: true
+            auto_allocate_fip: true
+            subnet_uuid: "{{ pub_subnet1_id[0] }}"
+            auto_allocate_floating_ip: true
+

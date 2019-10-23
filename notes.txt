@@ -1,2 +1,16 @@
 ./init_system.py -c 172.17.0.2 -i 172.17.0.3 -m 255.255.0.0 -g 172.17.0.1 -r -t 1d28d2d0-d564-4cfb-a704-fdd22f5d0c92
 tail -f /opt/avi/log/se_supervisor.log
+
+# todo
+## generate token
+https://<Controller-IP>/api/securetoken-generate?cloud_uuid=cloud-724fea9f-b1a7-4830-961d-80006d87f7a3
+For getting the UUID:
+https://<Controller-IP>/api/cloud
+
+
+## work out API auth
+
+## work out eth0 veth pairs
+-- snaproute?
+
+## BGP/
